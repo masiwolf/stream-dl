@@ -1,0 +1,70 @@
+#!/bin/bash
+
+input="${1:-none}"
+output="${2:-output.ts}"
+skip="${3:-no}"
+
+ofile=$(basename -- "$output")
+omime="${ofile##*.}"
+oname="${ofile%.*}"
+wdir="${PWD}/${oname}"
+
+echo "Processing output: ${ofile} ; ${omime} ; ${oname}"
+mkdir -p "${wdir}"
+
+ofile="${wdir}/${oname}.mp4"
+om3u8="${wdir}/${oname}.m3u8"
+
+# Download m3u8
+if [ ! -f "$om3u8" ]; then
+  echo "Getting file list: ${om3u8}"
+  wget -O "${om3u8}" "${input}"
+fi
+
+# Download film
+if [ ! -f "$ofile" ] && [ "skip" != "$skip" ]; then
+  echo "Streaming file: ${ofile}"
+  ffmpeg -i "${input}" -c copy -bsf:a aac_adtstoasc "${ofile}"
+fi
+
+# Download text
+sublist=$(grep -n "#EXT-X-MEDIA:TYPE=SUBTITLES" "${om3u8}")
+for subitem in $sublist ; do
+  vttln="${subitem##*EXT-X-MEDIA:}"
+  echo "$vttln"
+
+  declare -A hashmap
+  IFS=',' read -r -a array <<< "$vttln"
+  for element in "${array[@]}"
+  do
+      echo "$element"
+      IFS='=' read key value <<< "$element"
+      temp="${value%\"}"
+      temp="${temp#\"}"
+      hashmap["$key"]="$temp"
+  done
+
+  vttnme="${hashmap["NAME"]:-Fremmedsprogstekster}"
+  vttlng="${hashmap["LANGUAGE"]:-en}"
+  vtturi="${hashmap["URI"]}"
+
+  echo "Processing vtt: $vttnme"
+  echo "           lng: $vttlng"
+
+  if [[ ! -z "$vtturi" ]] && [[ "$vttnme" != "Fremmedsprogstekster" ]] ; then
+    if [ ! -f "${wdir}/${oname}.${vttlng}.vtt.uris" ]; then
+      wget -O "${wdir}/${oname}.${vttlng}.vtt.list" "$vtturi"
+      sed 's/#.*$//' "${wdir}/${oname}.${vttlng}.vtt.list" > "${wdir}/${oname}.${vttlng}.vtt.uris"
+    fi
+    if [ ! -f "${wdir}/${oname}.${vttlng}.vtt" ]; then
+      wget -i "${wdir}/${oname}.${vttlng}.vtt.uris" -O "${wdir}/${oname}.${vttlng}.vtt"
+    fi
+
+    mv "${wdir}/${oname}.${vttlng}.vtt" "${wdir}/${oname}.${vttlng}.vtt_"
+    cat "${wdir}/${oname}.${vttlng}.vtt_" | sed -e 's/^[ \t]*//' > "${wdir}/${oname}.${vttlng}.vtt"
+    rm "${wdir}/${oname}.${vttlng}.vtt_"
+
+    ffmpeg -y -i "${wdir}/${oname}.${vttlng}.vtt" "${wdir}/${oname}.${vttlng}.srt"
+    rm "${wdir}/${oname}.${vttlng}.vtt.*"
+  fi
+done
