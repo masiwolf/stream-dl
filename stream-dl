@@ -65,6 +65,8 @@ for subitem in $sublist ; do
     rm "${wdir}/${oname}.${vttlng}.vtt_"
 
     ffmpeg -y -i "${wdir}/${oname}.${vttlng}.vtt" "${wdir}/${oname}.${vttlng}.srt"
-    rm "${wdir}/${oname}.${vttlng}.vtt.*"
+
+    [ -e "${wdir}/${oname}.${vttlng}.vtt.uris" ] && rm -- "${wdir}/${oname}.${vttlng}.vtt.uris"
+    [ -e "${wdir}/${oname}.${vttlng}.vtt.list" ] && rm -- "${wdir}/${oname}.${vttlng}.vtt.list"    
   fi
 done
